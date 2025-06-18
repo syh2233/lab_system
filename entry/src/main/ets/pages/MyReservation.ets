@@ -1,158 +1,241 @@
-import promptAction from '@ohos.promptAction';
 import router from '@ohos.router';
+import common from '@ohos.app.ability.common';
+import promptAction from '@ohos.promptAction';
+import { apiService } from '../services/ApiService';
 
-interface ReservationItem {
-  id: number
-  labName: string
-  date: string
-  time: string
-  status: string
+// 确保与API服务中的接口定义兼容
+interface Laboratory {
+  id: number;
+  name: string;
+  location: string;
+  capacity: number;
+  description: string;
+  availability: boolean;
+}
+
+interface Reservation {
+  id?: number;
+  labId: number;
+  userId?: number;
+  startTime: string;
+  endTime: string;
+  purpose: string;
+  status?: string;
+  laboratory?: Laboratory;
+  rejectReason?: string;
 }
 
 @Entry
 @Component
 struct MyReservation {
-  private allReservations: ReservationItem[] = [
-    { id: 1, labName: '物理实验室', date: '2025-06-18', time: '14:00-16:00', status: '已通过' },
-    { id: 2, labName: '化学实验室', date: '2025-06-20', time: '09:00-11:00', status: '待审核' },
-    { id: 3, labName: '生物实验室', date: '2025-06-25', time: '10:00-12:00', status: '已拒绝' },
-    { id: 4, labName: '地理实验室', date: '2025-07-01', time: '08:00-10:00', status: '已通过' },
-    { id: 5, labName: '物理实验室', date: '2025-07-03', time: '10:00-12:00', status: '待审核' },
-    { id: 6, labName: '生物实验室', date: '2025-07-04', time: '13:00-15:00', status: '已通过' },
-    { id: 7, labName: '化学实验室', date: '2025-07-08', time: '09:00-11:00', status: '待审核' }
-  ]
-  private page: number = 1
-  private pageSize: number = 3
-  private reservations: ReservationItem[] = []
-
-  private message: string = ''
+  @State reservations: Reservation[] = []
+  @State isLoading: boolean = false
+  @State message: string = ''
+  private context: common.UIAbilityContext | null = null
 
   aboutToAppear() {
-    this.loadMore()
+    this.context = getContext(this) as common.UIAbilityContext;
+    apiService.initContext(this.context);
+    this.loadReservations();
   }
 
-  loadMore() {
-    const start = (this.page - 1) * this.pageSize
-    const end = this.page * this.pageSize
-    const next = this.allReservations.slice(start, end)
-    if (next.length > 0) {
-      this.reservations = this.reservations.concat(next)
-      this.page++
+  async loadReservations() {
+    this.isLoading = true;
+    try {
+      this.reservations = await apiService.getUserReservations();
+      if (this.reservations.length === 0) {
+        this.message = '您还没有预约记录';
+      }
+    } catch (error) {
+      console.error('获取预约记录失败:', error);
+      this.message = '获取预约记录失败';
+    } finally {
+      this.isLoading = false;
     }
   }
 
-  async cancelReservation(id: number) {
-    let result = await promptAction.showDialog({
-      title: '取消预约',
-      message: '确定要取消该预约吗？',
-      buttons: [
-        { text: '取消', color: '#666' },
-        { text: '确定', color: '#FF3333' }
-      ]
-    })
-    if (result && result.index === 1) {
-      this.reservations = this.reservations.filter(item => item.id !== id)
-      this.allReservations = this.allReservations.filter(item => item.id !== id)
-      this.message = '已取消预约'
+  async cancelReservation(id?: number) {
+    if (!id) {
+      return;
+    }
+    try {
+      await apiService.cancelReservation(id);
+      await this.loadReservations();
+      promptAction.showToast({ message: '取消成功' });
+    } catch (error) {
+      console.error('取消预约失败:', error);
+      promptAction.showToast({ message: '取消失败' });
     }
   }
 
+  @Builder renderReservationItem(reservation: Reservation) {
+    Column() {
+      Row() {
+        Column() {
+          Text(reservation.laboratory ? reservation.laboratory.name : "未知实验室")
+            .fontSize(18)
+            .fontWeight(FontWeight.Bold)
+            .margin({ bottom: 4 })
+          
+          Text(`地点：${reservation.laboratory ? reservation.laboratory.location : "未知"}`)
+            .fontSize(14)
+            .margin({ bottom: 2 })
+          
+          Text(`用途：${reservation.purpose}`)
+            .fontSize(14)
+            .margin({ bottom: 2 })
+          
+          Text(`时间：${this.formatTimeRange(reservation.startTime, reservation.endTime)}`)
+            .fontSize(14)
+            .margin({ bottom: 6 })
+          
+          if (reservation.status === 'REJECTED' && reservation.rejectReason) {
+            Text(`拒绝原因：${reservation.rejectReason}`)
+              .fontSize(14)
+              .fontColor(Color.Red)
+              .margin({ bottom: 6 })
+          }
+          
+          Row() {
+            Text(`状态：`)
+              .fontSize(14)
+            
+            Text(this.getStatusText(reservation.status))
+              .fontSize(14)
+              .fontColor(this.getStatusColor(reservation.status))
+          }
+        }
+        .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
+        
+        if (reservation.status === 'PENDING') {
+          Button("取消")
+            .fontSize(14)
+            .height(32)
+            .backgroundColor('#FF4444')
+            .fontColor(Color.White)
+            .onClick(() => {
+              this.cancelReservation(reservation.id);
+            })
+        }
+      }
+      .width('100%')
+      .justifyContent(FlexAlign.SpaceBetween)
+      .alignItems(VerticalAlign.Center)
+      
+      Divider().margin({ top: 12, bottom: 12 })
+    }
+    .padding(12)
+  }
 
-  showDetail(item: ReservationItem) {
-    promptAction.showDialog({
-      title: '预约详情',
-      message: `实验室：${item.labName}\n日期：${item.date}\n时间：${item.time}\n状态：${item.status}`,
-      buttons: [{ text: '确定', color: '#3366FF' }]
-    })
+  formatTimeRange(startTime?: string, endTime?: string): string {
+    if (!startTime || !endTime) return "时间未定";
+    try {
+      // 格式化开始时间和结束时间
+      const start = new Date(startTime);
+      const end = new Date(endTime);
+      
+      const month = start.getMonth() + 1;
+      const date = start.getDate();
+      
+      const startHour = start.getHours().toString().padStart(2, '0');
+      const startMinute = start.getMinutes().toString().padStart(2, '0');
+      const endHour = end.getHours().toString().padStart(2, '0');
+      const endMinute = end.getMinutes().toString().padStart(2, '0');
+      
+      return `${month}月${date}日 ${startHour}:${startMinute}-${endHour}:${endMinute}`;
+    } catch (e) {
+      console.error('日期格式化错误:', e);
+      return `${startTime} - ${endTime}`;
+    }
+  }
+
+  getStatusText(status?: string): string {
+    if (!status) return "未知";
+    switch (status) {
+      case 'PENDING': return '待审核';
+      case 'APPROVED': return '已通过';
+      case 'REJECTED': return '已拒绝';
+      case 'COMPLETED': return '已完成';
+      case 'CANCELLED': return '已取消';
+      default: return status;
+    }
+  }
+
+  getStatusColor(status?: string): string {
+    if (!status) return "#000000";
+    switch (status) {
+      case 'PENDING': return "#FFA500";
+      case 'APPROVED': return "#00AA00";
+      case 'REJECTED': return "#FF0000";
+      case 'COMPLETED': return "#0000FF";
+      case 'CANCELLED': return "#888888";
+      default: return "#000000";
+    }
   }
 
   build() {
     Column() {
+      // 页面标题
       Text('我的预约')
         .fontSize(28)
         .fontWeight(FontWeight.Bold)
-        .margin({ top: 24, bottom: 24 })
+        .margin({ top: 30, bottom: 26 })
+        .alignSelf(ItemAlign.Start)
 
-      if (this.reservations.length === 0) {
-        Text('暂无预约记录')
-          .fontSize(18)
-          .fontColor(Color.Gray)
-          .margin({ top: 40 })
+      if (this.isLoading) {
+        LoadingProgress()
+          .width(50)
+          .height(50)
+          .margin({ top: 80 })
+      } else if (this.message !== '') {
+        Text(this.message)
+          .fontSize(16)
+          .margin({ top: 60 })
       } else {
+        // 预约列表
         List() {
-          ForEach(this.reservations, (item: ReservationItem) => {
+          ForEach(this.reservations, (reservation: Reservation) => {
             ListItem() {
-              Column() {
-                Row() {
-                  Text(item.labName)
-                    .fontSize(20)
-                    .fontWeight(FontWeight.Medium)
-                  Blank()
-                  // 状态
-                  Text(item.status)
-                    .fontSize(15)
-                    .fontColor(item.status === '已通过'
-                      ? Color.Green
-                      : (item.status === '已拒绝' ? Color.Red : Color.Orange))
-                }
-                .margin({ bottom: 4 })
-
-                Row() {
-                  Text(`日期：${item.date}`)
-                    .fontSize(15)
-                    .fontColor(Color.Gray)
-                  Text(`    时间：${item.time}`)
-                    .fontSize(15)
-                    .fontColor(Color.Gray)
-                  Blank()
-                  // 详情按钮
-                  Text('详情')
-                    .fontSize(15)
-                    .fontColor('#3366FF')
-                    .margin({ left: 18, right: 8 })
-                    .onClick(() => this.showDetail(item))
-                  // 仅待审核、已通过可取消
-                  if (item.status === '待审核' || item.status === '已通过') {
-                    Text('取消')
-                      .fontSize(15)
-                      .fontColor(Color.Red)
-                      .onClick(() => this.cancelReservation(item.id))
-                  }
-                }
-              }
-              .width('100%')
-              .padding(14)
-              .backgroundColor(Color.White)
-              .borderRadius(10)
-              .shadow({ radius: 3, color: '#1A000000' })
-              .margin({ bottom: 12 })
+              this.renderReservationItem(reservation)
             }
-          }, (item: ReservationItem) => item.id.toString())
+            .width('100%')
+          }, (reservation: Reservation, index: number) => (reservation.id ? reservation.id.toString() : index.toString()))
         }
         .width('100%')
+        .layoutWeight(1)
       }
-
-      if (this.reservations.length < this.allReservations.length) {
-        Button('加载更多')
-          .width('100%')
+      
+      Row() {
+        Button("返回主页")
+          .width('42%')
           .height(40)
-          .margin({ top: 14 })
           .backgroundColor('#3366FF')
           .fontColor(Color.White)
           .borderRadius(8)
-          .onClick(() => this.loadMore())
+          .margin({ right: 10 })
+          .onClick(() => {
+            router.back();
+          })
+        
+        Button("刷新列表")
+          .width('42%')
+          .height(40)
+          .backgroundColor('#33CC33')
+          .fontColor(Color.White)
+          .borderRadius(8)
+          .margin({ left: 10 })
+          .onClick(() => {
+            this.loadReservations();
+          })
       }
-
-      if (this.message !== '') {
-        Text(this.message)
-          .fontSize(15)
-          .fontColor(Color.Green)
-          .margin({ top: 12, bottom: 8 })
-      }
+      .width('100%')
+      .margin({ top: 20, bottom: 20 })
+      .justifyContent(FlexAlign.Center)
     }
     .width('100%')
     .height('100%')
-    .padding(18)
+    .padding(24)
     .backgroundColor('#F5F5F5')
   }
 }

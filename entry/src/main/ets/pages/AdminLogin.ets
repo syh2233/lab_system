@@ -1,8 +1,8 @@
 import router from '@ohos.router';
 import hilog from '@ohos.hilog';
 import common from '@ohos.app.ability.common';
-import http from '@ohos.net.http';
 import { BusinessError } from '@ohos.base';
+import { apiService } from '../services/ApiService';
 
 // 定义管理员账号接口
 interface AdminAccount {
@@ -16,6 +16,7 @@ struct AdminLogin {
   @State username: string = '';
   @State password: string = '';
   @State isLoading: boolean = false;
+  @State message: string = '';
 
   // 默认管理员账号
   private defaultAdmin: AdminAccount = {
@@ -25,6 +26,8 @@ struct AdminLogin {
 
   aboutToAppear() {
     hilog.info(0x0000, 'AdminLogin', '页面即将显示');
+    // 初始化API服务
+    apiService.initContext(getContext(this) as common.UIAbilityContext);
   }
 
   build() {
@@ -82,6 +85,13 @@ struct AdminLogin {
             this.password = value;
           })
 
+        if (this.message !== '') {
+          Text(this.message)
+            .fontSize(16)
+            .fontColor(Color.Red)
+            .margin({ bottom: 18 })
+        }
+
         // 登录按钮
         Button('登录')
           .width('90%')
@@ -109,35 +119,46 @@ struct AdminLogin {
     .backgroundColor('#F5F5F5')
   }
 
-  private handleLogin() {
+  async handleLogin() {
     if (!this.username || !this.password) {
       let context = getContext(this) as common.UIAbilityContext;
       context.eventHub.emit('showToast', { message: '请输入用户名和密码' });
+      this.message = '请输入用户名和密码';
       return;
     }
 
     this.isLoading = true;
     hilog.info(0x0000, 'AdminLogin', '开始登录验证');
 
-    // 模拟网络请求
-    setTimeout(() => {
-      if (this.username === this.defaultAdmin.username && 
-          this.password === this.defaultAdmin.password) {
-        hilog.info(0x0000, 'AdminLogin', '登录成功');
-        let context = getContext(this) as common.UIAbilityContext;
-        context.eventHub.emit('showToast', { message: '登录成功' });
-        router.pushUrl({
-          url: 'pages/AdminHome'
-        }).catch((err: BusinessError) => {
-          hilog.error(0x0000, 'AdminLogin', `路由跳转失败: ${err}`);
-          context.eventHub.emit('showToast', { message: '页面跳转失败' });
-        });
-      } else {
-        hilog.error(0x0000, 'AdminLogin', '用户名或密码错误');
-        let context = getContext(this) as common.UIAbilityContext;
-        context.eventHub.emit('showToast', { message: '用户名或密码错误' });
+    try {
+      // 调用API服务登录
+      const response = await apiService.login(this.username, this.password);
+      
+      hilog.info(0x0000, 'AdminLogin', '登录成功');
+      let context = getContext(this) as common.UIAbilityContext;
+      
+      // 验证是否为管理员
+      if (response.role !== 'ADMIN') {
+        this.message = '您不是管理员，无法登录';
+        context.eventHub.emit('showToast', { message: '您不是管理员，无法登录' });
+        return;
       }
+      
+      context.eventHub.emit('showToast', { message: '登录成功' });
+      router.pushUrl({
+        url: 'pages/AdminHome'
+      }).catch((err: BusinessError) => {
+        hilog.error(0x0000, 'AdminLogin', `路由跳转失败: ${err}`);
+        context.eventHub.emit('showToast', { message: '页面跳转失败' });
+      });
+    } catch (error) {
+      const err = error as BusinessError;
+      hilog.error(0x0000, 'AdminLogin', `登录失败: ${err.message}`);
+      let context = getContext(this) as common.UIAbilityContext;
+      this.message = `登录失败: ${err.message}`;
+      context.eventHub.emit('showToast', { message: `登录失败: ${err.message}` });
+    } finally {
       this.isLoading = false;
-    }, 1000);
+    }
   }
-} 
+}

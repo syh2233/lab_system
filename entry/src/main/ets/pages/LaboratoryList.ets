@@ -1,47 +1,79 @@
 import promptAction from '@ohos.promptAction';
+import common from '@ohos.app.ability.common';
+import { apiService } from '../services/ApiService';
 
-interface LabItem {
-  id: number
-  name: string
-  location: string
-  manager: string
-  desc: string
+class User {
+  id: number = 0;
+  username: string = '';
+  fullName: string = '';
+}
+
+class LabItem {
+  id: number = 0;
+  name: string = '';
+  location: string = '';
+  manager: User | null = null;
+  description: string = '';
+  capacity: number = 0;
+  availability: boolean = false;
 }
 
 @Entry
 @Component
 struct LaboratoryList {
-  private allLabs: LabItem[] = [
-    { id: 1, name: '物理实验室', location: '1号楼201室', manager: '张三', desc: '装备齐全，支持物理实验教学与科研。' },
-    { id: 2, name: '化学实验室', location: '2号楼301室', manager: '李四', desc: '配备现代化化学设备，注重安全管理。' },
-    { id: 3, name: '生物实验室', location: '3号楼102室', manager: '王五', desc: '适合基础和高级生物实验。' },
-    { id: 4, name: '地理实验室', location: '4号楼104室', manager: '赵六', desc: '地理学及相关领域实验。' },
-    { id: 5, name: '计算机实验室', location: '5号楼201室', manager: '钱七', desc: '高性能计算环境，适合编程及人工智能项目。' }
-  ]
-  private page: number = 1
-  private pageSize: number = 3
-  private labs: LabItem[] = []
+  @State labs: LabItem[] = []
+  @State loading: boolean = false
+  @State message: string = ''
+  private context: common.UIAbilityContext | null = null
 
   aboutToAppear() {
-    this.loadMore()
+    this.context = getContext(this) as common.UIAbilityContext;
+    apiService.initContext(this.context);
+    this.loadLaboratories();
   }
 
-  loadMore() {
-    const start = (this.page - 1) * this.pageSize
-    const end = this.page * this.pageSize
-    const next = this.allLabs.slice(start, end)
-    if (next.length > 0) {
-      this.labs = this.labs.concat(next)
-      this.page++
+  async loadLaboratories() {
+    this.loading = true;
+    try {
+      const labsData = await apiService.getLaboratories();
+      // 将API返回的实验室数据转换为UI所需的格式
+      this.labs = labsData.map(lab => {
+        const labItem = new LabItem();
+        labItem.id = lab.id;
+        labItem.name = lab.name;
+        labItem.location = lab.location;
+        labItem.description = lab.description;
+        labItem.capacity = lab.capacity;
+        labItem.availability = lab.availability;
+        
+        // 假设API暂时没有返回manager数据
+        labItem.manager = null;
+        
+        return labItem;
+      });
+      
+      if (this.labs.length === 0) {
+        this.message = '暂无实验室数据';
+      }
+    } catch (error) {
+      console.error('获取实验室列表失败:', error);
+      this.message = '获取实验室列表失败';
+      if (this.context) {
+        this.context.eventHub.emit('showToast', { message: '获取实验室列表失败' });
+      }
+    } finally {
+      this.loading = false;
     }
   }
 
   showLabDetail(lab: LabItem) {
+    const managerName = lab.manager ? lab.manager.fullName || lab.manager.username : '未指定';
+    
     promptAction.showDialog({
       title: lab.name,
-      message: `位置：${lab.location}\n管理员：${lab.manager}\n简介：${lab.desc}`,
+      message: `位置：${lab.location}\n容量：${lab.capacity}人\n管理员：${managerName}\n简介：${lab.description}`,
       buttons: [{ text: '确定', color: '#3366FF' }]
-    })
+    });
   }
 
   build() {
@@ -51,8 +83,13 @@ struct LaboratoryList {
         .fontWeight(FontWeight.Bold)
         .margin({ top: 24, bottom: 24 })
 
-      if (this.labs.length === 0) {
-        Text('暂无实验室信息')
+      if (this.loading) {
+        LoadingProgress()
+          .width(50)
+          .height(50)
+          .margin({ top: 80 })
+      } else if (this.message) {
+        Text(this.message)
           .fontSize(18)
           .fontColor(Color.Gray)
           .margin({ top: 40 })
@@ -78,7 +115,7 @@ struct LaboratoryList {
                     .fontSize(15)
                     .fontColor(Color.Gray)
                   Blank()
-                  Text(`管理员：${lab.manager}`)
+                  Text(`容量：${lab.capacity}人`)
                     .fontSize(15)
                     .fontColor(Color.Gray)
                 }
@@ -94,17 +131,15 @@ struct LaboratoryList {
         }
         .width('100%')
         .height(300)
-      }
 
-      if (this.labs.length < this.allLabs.length) {
-        Button('加载更多')
+        Button('刷新')
           .width('100%')
           .height(40)
           .margin({ top: 14 })
           .backgroundColor('#3366FF')
           .fontColor(Color.White)
           .borderRadius(8)
-          .onClick(() => this.loadMore())
+          .onClick(() => this.loadLaboratories())
       }
     }
     .width('100%')

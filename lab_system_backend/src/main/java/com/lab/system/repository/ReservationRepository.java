@@ -26,7 +26,7 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
     
     @Query("SELECT r FROM Reservation r WHERE r.lab = :lab AND r.date = :date " +
            "AND ((r.startTime <= :endTime AND r.endTime >= :startTime) " +
-           "AND r.status = com.lab.system.entity.Reservation.ReservationStatus.APPROVED)")
+           "AND r.status = 'APPROVED')")
     List<Reservation> findConflictingReservations(
             @Param("lab") Laboratory lab,
             @Param("date") LocalDate date,
