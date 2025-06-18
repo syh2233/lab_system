@@ -77,7 +77,7 @@ class HttpHeader {
  * API服务类，封装所有与后端的网络请求
  */
 export class ApiService {
-  private baseUrl: string = 'http://localhost:8080/api';
+  private baseUrl: string = 'http://192.168.31.193:8080/api';
   private token: string = '';
   private context: common.UIAbilityContext | null = null;
   private preferencesName: string = 'user_preferences';

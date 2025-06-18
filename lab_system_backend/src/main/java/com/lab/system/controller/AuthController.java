@@ -34,6 +34,8 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<?> authenticateUser(@Valid @RequestBody LoginRequest loginRequest) {
+        System.out.println("前端传来的用户名: [" + loginRequest.getUsername() + "]");
+        System.out.println("前端传来的明文密码: [" + loginRequest.getPassword() + "] 长度: [" + loginRequest.getPassword().length() + "]");
         Authentication authentication = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(loginRequest.getUsername(), loginRequest.getPassword()));
 
