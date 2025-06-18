@@ -1,0 +1,24 @@
+{
+  "src": [
+    "pages/LoginSelect",
+    "pages/AdminLogin",
+    "pages/UserLogin",
+    "pages/AdminHome",
+    "pages/LaboratoryDetail",
+    "pages/ReservationManagement",
+    "pages/DeviceManagement",
+    "pages/UserManagement",
+    "pages/StatisticsPage",
+    "pages/SystemSettings",
+    "pages/MyPage",
+    "pages/ProfilePage",
+    "pages/FavoritePage",
+    "pages/ChangePasswordPage",
+    "pages/BookingRulePage",
+    "pages/PermissionPage",
+    "pages/UserHome",
+    "pages/MyReservation",
+    "pages/LaboratoryList",
+    "pages/LabReservation"
+  ]
+}
